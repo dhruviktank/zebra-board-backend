@@ -1,0 +1,53 @@
+// Prisma schema for PostgreSQL
+// Adjust provider or add previewFeatures as needed
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Core user of the typing platform
+model User {
+  id                        String       @id @default(cuid())
+  username                  String       @unique
+  email                     String?      @unique
+  passwordHash              String?      // nullable for OAuth accounts
+  provider                  String?      // 'google' | 'github'
+  providerId                String?      @unique
+  emailVerifiedAt           DateTime?
+  emailVerificationToken    String?      @unique
+  emailVerificationSentAt   DateTime?
+  createdAt                 DateTime     @default(now())
+  updatedAt                 DateTime     @updatedAt
+  testResults               TestResult[]
+
+  @@index([provider, providerId])
+}
+
+// Stores individual typing test results
+model TestResult {
+  id          String   @id @default(cuid())
+  wpm         Int
+  accuracy    Float    // 0-100 percentage
+  rawWpm      Int?     // optional raw/gross wpm
+  characters  Int?     // total characters typed
+  durationSec Int?     // test duration seconds
+  mode        String?  // e.g. "time", "words"
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id])
+  userId      String?
+}
+
+// Example of future expansion (uncomment when needed)
+// model Session {
+//   id        String   @id @default(cuid())
+//   token     String   @unique
+//   user      User     @relation(fields: [userId], references: [id])
+//   userId    String
+//   createdAt DateTime @default(now())
+//   expiresAt DateTime
+// }

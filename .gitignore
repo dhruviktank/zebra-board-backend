@@ -1,0 +1,154 @@
+### --- Node.js Dependencies ---
+node_modules/
+jspm_packages/
+
+### --- Environment & Secrets ---
+.env
+.env.*
+!.env.example
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+### --- Logs & Runtime Output ---
+logs/
+*.log
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+### --- Process ID files ---
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+### --- Coverage & Testing ---
+coverage/
+.nyc_output/
+reports/
+playwright-report/
+.cache/playwright/
+junit.xml
+
+### --- Build Artifacts ---
+dist/
+build/
+out/
+tmp/
+temp/
+.tmp/
+.cache/
+cache/
+
+### --- TypeScript ---
+*.tsbuildinfo
+tsconfig.tsbuildinfo
+
+### --- Packaging ---
+*.tgz
+
+### --- Dependency Managers ---
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+shrinkwrap.yaml
+
+### --- Optional: allow one lockfile (uncomment the one you use) ---
+# !package-lock.json
+# !yarn.lock
+# !pnpm-lock.yaml
+
+### --- IDE & Editor Junk ---
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.code-workspace
+
+### --- OS Files ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+### --- Misc Caches ---
+.eslintcache
+.stylelintcache
+.tscache
+.cache-loader
+.rpt2_cache/
+.node_repl_history
+
+### --- Node REPL history ---
+.node_history
+
+### --- Production / Deployed Artifacts ---
+public/build/
+
+### --- Docker ---
+docker-data/
+docker-compose.override.yml
+*.tar
+
+### --- Database & Local Data ---
+data/
+*.sqlite
+*.sqlite-journal
+*.db
+*.db-journal
+mongodb-memory-server*
+
+### --- PM2 / Process Managers ---
+pm2.log
+pm2.pid
+ecosystem.config.js
+
+### --- Local Certificates ---
+certs/
+*.pem
+*.crt
+*.key
+
+### --- Swagger / API Docs Generated ---
+swagger-generated.json
+openapi-generated.json
+
+### --- Temporary Files ---
+*.swp
+*.swo
+*.orig
+*.bak
+*.tmp
+*~
+
+### --- Lock / State / Coverage Reports ---
+coverage-final.json
+nyc-output.json
+
+### --- Ignore crash dumps ---
+core*
+
+### --- Optional Framework Specific (comment out if needed) ---
+# Next.js
+.next/
+# NestJS build
+dist/
+# SvelteKit
+.svelte-kit/
+# Remix build
+build/
+
+### --- Keep examples & templates ---
+!**/example/**
+!**/examples/**
+!**/templates/**
+
+### --- Local override file pattern ---
+*.local.*
+
+### --- End ---
