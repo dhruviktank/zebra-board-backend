@@ -11,6 +11,18 @@ import { notFound, errorHandler } from './middleware/errors.js';
 import cors from 'cors';
 const app = express();
 
+// Behind Railway / reverse proxies we need to trust the first proxy so that
+// express-rate-limit and other middleware can read X-Forwarded-* headers safely.
+// Set via env override if needed: TRUST_PROXY=0 to disable.
+const trustProxy = process.env.TRUST_PROXY !== '0';
+if (trustProxy) {
+	// '1' trusts first proxy hop (sufficient for most PaaS like Railway / Render / Fly)
+	app.set('trust proxy', 1);
+	console.log('Trust proxy enabled (1)');
+} else {
+	console.log('Trust proxy disabled via TRUST_PROXY env');
+}
+
 // CORS configuration: supports comma-separated origins in CORS_ORIGIN
 const rawOrigins = process.env.CORS_ORIGIN || 'http://localhost:5173';
 const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean);
