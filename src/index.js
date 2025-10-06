@@ -10,15 +10,26 @@ import testResultsRouter from './routes/testResults.js';
 import { notFound, errorHandler } from './middleware/errors.js';
 import cors from 'cors';
 const app = express();
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
-const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
-app.use(cors({ origin: allowedOrigin, credentials: false }));
+
+// CORS configuration: supports comma-separated origins in CORS_ORIGIN
+const rawOrigins = process.env.CORS_ORIGIN || 'http://localhost:5173';
+const allowedOrigins = rawOrigins.split(',').map(o => o.trim()).filter(Boolean);
+
+const corsOptions = {
+	origin: (origin, callback) => {
+		if (!origin) return callback(null, true); // non-browser or same-origin
+		if (allowedOrigins.includes(origin)) return callback(null, true);
+		return callback(new Error('CORS not allowed for origin: ' + origin));
+	},
+	credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 // Minimal session just to satisfy passport's serialize/deserialize (OAuth flow). JWT used for API auth.
 app.use(session({ secret: process.env.SESSION_SECRET || 'dev-session', resave: false, saveUninitialized: false }));
 app.use(passport.initialize());
 app.use(passport.session());
-console.log('CORS enabled for origin:', allowedOrigin);
+console.log('CORS allowed origins:', allowedOrigins);
 
 app.get('/health', (req, res) => { res.json({ status: 'ok' }); });
 

@@ -5,7 +5,10 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon src/index.js",
+    "dev": "node src/index.js",
+    "start": "node src/index.js",
+    "migrate:deploy": "prisma migrate deploy",
+    "build": "echo \"No build step required for Node.js backend\"",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
