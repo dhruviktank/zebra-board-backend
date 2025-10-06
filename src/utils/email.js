@@ -1,22 +1,38 @@
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 
-// Create reusable transporter (lazy)
+// Lazy singleton transporter
 let transporterPromise;
 function getTransporter() {
-  if (!transporterPromise) {
-    if (!process.env.SMTP_HOST) {
-      console.warn('[Email] SMTP_HOST not set, emails will be logged only');
-      transporterPromise = Promise.resolve(null);
-    } else {
-      transporterPromise = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined
-      });
-    }
+  if (transporterPromise) return transporterPromise;
+
+  // SendGrid SMTP (explicit variables)
+  if (process.env.SEND_GRID_SERVER && process.env.SEND_GRID_USER && process.env.SEND_GRID_PASS) {
+    const host = process.env.SEND_GRID_SERVER; // usually smtp.sendgrid.net
+    const port = Number(process.env.SEND_GRID_PORT || 587);
+    const secure = process.env.SEND_GRID_SECURE === 'true' || port === 465;
+    transporterPromise = Promise.resolve(nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: { user: process.env.SEND_GRID_USER, pass: process.env.SEND_GRID_PASS }
+    }));
+    return transporterPromise;
   }
+
+  // Legacy generic SMTP support (optional): if someone still sets SMTP_HOST (fallback)
+  if (process.env.SMTP_HOST) {
+    transporterPromise = Promise.resolve(nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: (process.env.SMTP_USER && process.env.SMTP_PASS) ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS } : undefined
+    }));
+    return transporterPromise;
+  }
+
+  console.warn('[Email] No SMTP configuration detected (expecting SEND_GRID_* or SMTP_*); operating in mock mode');
+  transporterPromise = Promise.resolve(null);
   return transporterPromise;
 }
 
@@ -42,23 +58,30 @@ export async function sendVerificationEmail({ to, token }) {
   <p><code>${primaryLink}</code></p>`;
 
   const transporter = await getTransporter();
-  const debug = process.env.EMAIL_DEBUG === 'true';
+  // Debug/verification logic removed for production cleanliness.
   if (!transporter) {
     console.log('[Email][Mock] To:', to, '\nSubject:', subject, '\nText:', text);
     return { mocked: true };
   }
   try {
+    const from = process.env.EMAIL_FROM || 'no-reply@example.com';
+    if (from.endsWith('@example.com')) {
+      console.warn('[Email] Using placeholder from address (no-reply@example.com). Configure a verified SendGrid sender via EMAIL_FROM to avoid 550 errors.');
+    }
     const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || 'no-reply@example.com',
+      from,
       to,
       subject,
       text,
       html
     });
-    if (debug) console.log('[Email][Sent]', info.messageId, 'to', to, 'primaryLink=', primaryLink);
     return { mocked: false };
   } catch (err) {
-    console.warn('[Email][Error] Failed to send verification email:', err);
+    if (err && err.code === 'EAUTH') {
+      console.warn('[Email][AuthError] SMTP authentication failed. Check user / password (API key) and host/port/secure settings.');
+    } else {
+      console.warn('[Email][Error] Failed to send verification email:', err);
+    }
     throw err;
   }
 }
