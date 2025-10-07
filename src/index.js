@@ -82,6 +82,42 @@ app.use((req, res, next) => { next(notFound()); });
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
 	console.log(`API listening on :${PORT}`);
+});
+
+// Graceful shutdown & diagnostics
+const shutdownSignals = ['SIGTERM', 'SIGINT'];
+shutdownSignals.forEach(sig => {
+	process.on(sig, () => {
+		console.warn(`[Shutdown] Received ${sig}, starting graceful shutdown`);
+		// Close HTTP server
+		server.close(err => {
+			if (err) {
+				console.error('[Shutdown] Error closing server', err);
+				process.exitCode = 1;
+			}
+			// Attempt to end prisma + pg pool if present
+			Promise.resolve()
+				.then(async () => { try { await prisma.$disconnect(); console.log('[Shutdown] Prisma disconnected'); } catch (e) { console.warn('[Shutdown] Prisma disconnect error', e); } })
+				.then(() => { try { if (global.gc) global.gc(); } catch {} })
+				.finally(() => {
+					console.log('[Shutdown] Complete – exiting');
+					process.exit();
+				});
+		});
+		// Failsafe timeout
+		setTimeout(() => {
+			console.error('[Shutdown] Force exit after timeout');
+			process.exit(1);
+		}, 10000).unref();
+	});
+});
+
+process.on('uncaughtException', err => {
+	console.error('[Fatal] Uncaught exception', err);
+	process.exit(1);
+});
+process.on('unhandledRejection', err => {
+	console.error('[Fatal] Unhandled rejection', err);
 });
