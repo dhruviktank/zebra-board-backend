@@ -24,6 +24,7 @@ model User {
   createdAt                 DateTime     @default(now())
   updatedAt                 DateTime     @updatedAt
   testResults               TestResult[]
+  suggestions               Suggestion[]
 
   @@index([provider, providerId])
 }
@@ -40,6 +41,17 @@ model TestResult {
   createdAt   DateTime @default(now())
   user        User?    @relation(fields: [userId], references: [id])
   userId      String?
+}
+
+// Visitor/user submitted contact suggestions or messages
+model Suggestion {
+  id        String   @id @default(cuid())
+  name      String?
+  email     String?
+  message   String
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  createdAt DateTime @default(now())
 }
 
 // Example of future expansion (uncomment when needed)

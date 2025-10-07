@@ -14,7 +14,7 @@ export function verifyToken(token) {
 
 export function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ')) return res.status(401).json({ error: 'Missing token' });
+  if (!auth) return res.status(401).json({ error: 'Missing token' });
   const token = auth.slice(7);
   try {
     req.user = verifyToken(token);

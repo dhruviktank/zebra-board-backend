@@ -15,8 +15,13 @@ function sanitize(result) {
 // Create a test result
 router.post('/', async (req, res, next) => {
   try {
-    const { userId, wpm, accuracy, rawWpm, characters, durationSec, mode } = req.body;
+    let { userId, wpm, accuracy, rawWpm, characters, durationSec, mode } = req.body;
     if (wpm == null || accuracy == null) return res.status(400).json({ error: 'wpm and accuracy required' });
+    if (req.user?.id) {
+      userId = req.user.id;
+    } else {
+      userId = userId || null;
+    }
     const created = await prisma.testResult.create({
       data: { userId, wpm: Number(wpm), accuracy: Number(accuracy), rawWpm, characters, durationSec, mode }
     });
@@ -40,6 +45,27 @@ router.get('/', async (req, res, next) => {
       include: { user: true }
     });
     res.json(results.map(r => sanitize(r)));
+  } catch (e) { next(e); }
+});
+
+// Aggregate stats for a user's results
+router.get('/aggregate/by-user', async (req, res, next) => {
+  try {
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    const where = { userId: String(userId) };
+    const agg = await prisma.testResult.aggregate({
+      _count: { _all: true },
+      _max: { wpm: true },
+      _avg: { wpm: true, accuracy: true },
+      where
+    });
+    res.json({
+      count: agg._count._all || 0,
+      bestWpm: agg._max.wpm || 0,
+      avgWpm: agg._avg.wpm ? Math.round(agg._avg.wpm) : 0,
+      avgAccuracy: agg._avg.accuracy ? Math.round(agg._avg.accuracy) : 0
+    });
   } catch (e) { next(e); }
 });
 

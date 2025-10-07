@@ -9,6 +9,7 @@ import { passport } from './auth/passport.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import testResultsRouter from './routes/testResults.js';
+import suggestionsRouter from './routes/suggestions.js';
 import { notFound, errorHandler } from './middleware/errors.js';
 import cors from 'cors';
 const app = express();
@@ -74,6 +75,7 @@ app.get('/health', (req, res) => { res.json({ status: 'ok' }); });
 app.use('/users', usersRouter);
 app.use('/test-results', testResultsRouter);
 app.use('/auth', authRouter);
+app.use('/suggestions', suggestionsRouter);
 
 // Generic 404 -> forward to error middleware
 app.use((req, res, next) => { next(notFound()); });

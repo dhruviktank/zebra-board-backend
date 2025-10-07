@@ -4,6 +4,7 @@ import { hashPassword, comparePassword } from '../utils/password.js';
 import { generateVerificationToken, sendVerificationEmail } from '../utils/email.js';
 import { registerLimiter, verificationStatusLimiter } from '../middleware/rateLimiters.js';
 import { AppError, badRequest, unauthorized, forbidden } from '../middleware/errors.js';
+import { signUser } from '../auth/jwt.js';
 
 const router = Router();
 
@@ -126,7 +127,8 @@ router.post('/login', async (req, res, next) => {
     const valid = await comparePassword(password, user.passwordHash);
   if (!valid) throw unauthorized('Invalid credentials');
     if (user.email && !user.emailVerifiedAt) throw forbidden('Email not verified');
-    res.json({ user: sanitizeUser(user) });
+    const token = signUser(user);
+    res.json({ user: sanitizeUser(user), token });
   } catch (e) { next(e); }
 });
 
