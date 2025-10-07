@@ -67,30 +67,31 @@ export async function sendVerificationEmail({ to, token }) {
   <p><code>${primaryLink}</code></p>`;
 
   const transporter = await getTransporter();
-  // Debug/verification logic removed for production cleanliness.
-  if (!transporter) {
-    console.log('[Email][Mock] To:', to, '\nSubject:', subject, '\nText:', text);
-    return { mocked: true };
-  }
   try {
     const from = process.env.EMAIL_FROM || 'no-reply@example.com';
     if (from.endsWith('@example.com')) {
       console.warn('[Email] Using placeholder from address (no-reply@example.com). Configure a verified SendGrid sender via EMAIL_FROM to avoid 550 errors.');
     }
-    if (transporter) {
-      try {
-        const info = await transporter.sendMail({ from, to, subject, text, html });
-        return { mocked: false, method: 'smtp' };
-      } catch (err) {
-        if (err && err.code === 'ETIMEDOUT') {
-          console.warn('[Email][SMTP Timeout] Falling back to SendGrid Web API');
-          return await sendViaSendGridApi({ from, to, subject, text, html });
-        }
-        throw err;
-      }
-    } else {
-      // Direct API strategy (EMAIL_TRANSPORT_STRATEGY=api)
+    const hasSendGridCreds = !!(process.env.SEND_GRID_SERVER && process.env.SEND_GRID_USER && process.env.SEND_GRID_PASS);
+    // If transporter is null but credentials exist, we are in API strategy mode – send via API.
+    if (!transporter && hasSendGridCreds) {
       return await sendViaSendGridApi({ from, to, subject, text, html });
+    }
+    // If no transporter and no credentials, true mock mode.
+    if (!transporter) {
+      console.log('[Email][Mock] To:', to, '\nSubject:', subject, '\nText:', text);
+      return { mocked: true };
+    }
+    // Normal SMTP path
+    try {
+      const info = await transporter.sendMail({ from, to, subject, text, html });
+      return { mocked: false, method: 'smtp' };
+    } catch (err) {
+      if (err && err.code === 'ETIMEDOUT' && hasSendGridCreds) {
+        console.warn('[Email][SMTP Timeout] Falling back to SendGrid Web API');
+        return await sendViaSendGridApi({ from, to, subject, text, html });
+      }
+      throw err;
     }
   } catch (err) {
     if (err && err.code === 'EAUTH') {
