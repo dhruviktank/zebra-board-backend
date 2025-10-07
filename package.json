@@ -24,6 +24,7 @@
     "express": "^5.1.0",
     "express-rate-limit": "^7.1.5",
     "express-session": "^1.17.3",
+    "connect-pg-simple": "^9.0.0",
     "jsonwebtoken": "^9.0.2",
     "nodemailer": "^6.9.13",
     "passport": "^0.7.0",

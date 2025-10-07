@@ -3,6 +3,8 @@ import 'dotenv/config';
 import express from 'express';
 import { prisma } from './prismaClient.js';
 import session from 'express-session';
+import pg from 'pg';
+import connectPg from 'connect-pg-simple';
 import { passport } from './auth/passport.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
@@ -38,7 +40,31 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 // Minimal session just to satisfy passport's serialize/deserialize (OAuth flow). JWT used for API auth.
-app.use(session({ secret: process.env.SESSION_SECRET || 'dev-session', resave: false, saveUninitialized: false }));
+// Postgres session store (production safe)
+const PgSession = connectPg(session);
+const pgPool = new pg.Pool({
+	connectionString: process.env.DATABASE_URL,
+	// Add ssl config if your provider requires: ssl: { rejectUnauthorized: false }
+});
+
+app.use(session({
+	store: new PgSession({
+		pool: pgPool,
+		tableName: 'session',
+		createTableIfMissing: true,
+		pruneSessionInterval: 60 // seconds (default). Adjust via env if needed.
+	}),
+	name: process.env.SESSION_COOKIE_NAME || 'sid',
+	secret: process.env.SESSION_SECRET || 'dev-session',
+	resave: false,
+	saveUninitialized: false,
+	cookie: {
+		httpOnly: true,
+		secure: process.env.NODE_ENV === 'production',
+		sameSite: 'lax',
+		maxAge: (parseInt(process.env.SESSION_MAX_AGE_DAYS || '7', 10)) * 24 * 60 * 60 * 1000
+	}
+}));
 app.use(passport.initialize());
 app.use(passport.session());
 console.log('CORS allowed origins:', allowedOrigins);
