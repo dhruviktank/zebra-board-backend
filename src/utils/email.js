@@ -38,7 +38,13 @@ function getTransporter() {
   const secure = (process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-
+console.log({
+  host: host,
+  port: port,
+  secure: secure,
+  user: user,
+  passLength: pass,
+});
   transporter = nodemailer.createTransport({
     host,
     port,
