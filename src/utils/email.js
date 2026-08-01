@@ -51,9 +51,11 @@ console.log({
     family: 4,
     secure,
     auth: (user && pass) ? { user, pass } : undefined,
-    pool: true,
+    pool: false,
     maxConnections: 5,
     maxMessages: 100,
+    logger: true,
+    debug: true,
     connectionTimeout: toInt(process.env.EMAIL_API_TIMEOUT_MS, 10000),
     greetingTimeout: toInt(process.env.EMAIL_API_TIMEOUT_MS, 10000),
     socketTimeout: toInt(process.env.EMAIL_API_TIMEOUT_MS, 10000)
