@@ -42,6 +42,7 @@ function getTransporter() {
   transporter = nodemailer.createTransport({
     host,
     port,
+    family: 4,
     secure,
     auth: (user && pass) ? { user, pass } : undefined,
     pool: true,
