@@ -1,18 +1,22 @@
 import crypto from 'crypto';
-import https from 'https';
+import nodemailer from 'nodemailer';
 
 /*
- * email.js (SendGrid API only)
+ * email.js (Gmail SMTP via Nodemailer)
  * ---------------------------------
  * Responsibilities:
  *  - Generate verification token
  *  - Build verification link (frontend preferred, backend fallback)
- *  - Send email via SendGrid Web API (no SMTP path)
+ *  - Send email via SMTP (Nodemailer, pooled connections)
  *  - Provide retry with exponential backoff, configurable via env
- *  - Safe mock mode when API key absent
+ *  - Safe mock mode when SMTP credentials absent
  *
  * Env Variables:
- *  SEND_GRID_PASS                (required for real send) – SendGrid API key
+ *  SMTP_HOST                     required for real send – e.g. smtp.gmail.com
+ *  SMTP_PORT                     required for real send – e.g. 465 or 587
+ *  SMTP_SECURE                   'true' for port 465 (implicit TLS), 'false' otherwise
+ *  SMTP_USER                     required for real send – Gmail address / SMTP username
+ *  SMTP_PASS                     required for real send – Gmail app password / SMTP password
  *  EMAIL_FROM                    e.g. "Zebra Board <no-reply@yourdomain.com>"
  *  FRONTEND_VERIFY_URL           optional, if set builds link to frontend page
  *  BACKEND_BASE_URL / OAUTH_CALLBACK_URL  fallback for backend verify link
@@ -22,8 +26,61 @@ import https from 'https';
  *  EMAIL_API_LOG_FAILURES        if 'true', log each failed attempt (default true)
  */
 
-// Reusable keep-alive HTTPS agent to reduce handshake latency
-const sendGridAgent = new https.Agent({ keepAlive: true, maxSockets: 10, keepAliveMsecs: 15000 });
+// Reusable pooled SMTP transporter to reduce connection/handshake overhead
+let transporter = null;
+let transporterVerified = false;
+
+function getTransporter() {
+  if (transporter) return transporter;
+
+  const host = process.env.SMTP_HOST;
+  const port = toInt(process.env.SMTP_PORT, 587);
+  const secure = (process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: (user && pass) ? { user, pass } : undefined,
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    connectionTimeout: toInt(process.env.EMAIL_API_TIMEOUT_MS, 10000),
+    greetingTimeout: toInt(process.env.EMAIL_API_TIMEOUT_MS, 10000),
+    socketTimeout: toInt(process.env.EMAIL_API_TIMEOUT_MS, 10000)
+  });
+
+  return transporter;
+}
+
+// Verify transporter on startup (best-effort; failures are logged, not thrown,
+// so app boot isn't blocked and mock mode / retries can still function).
+export async function verifyTransporter() {
+  if (!hasSmtpCredentials()) {
+    console.log('[Email][Mock] (missing SMTP_HOST/SMTP_USER/SMTP_PASS) Skipping transporter verification.');
+    return { verified: false, mocked: true };
+  }
+  try {
+    const t = getTransporter();
+    await t.verify();
+    transporterVerified = true;
+    console.log('[Email] SMTP transporter verified successfully.');
+    return { verified: true, mocked: false };
+  } catch (err) {
+    transporterVerified = false;
+    console.warn('[Email] SMTP transporter verification failed:', err.message || err);
+    return { verified: false, mocked: false, error: err };
+  }
+}
+
+// Fire-and-forget verification at module load, mirroring "verify on startup".
+verifyTransporter();
+
+function hasSmtpCredentials() {
+  return Boolean(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+}
 
 export function generateVerificationToken() {
   return crypto.randomBytes(32).toString('hex');
@@ -36,13 +93,12 @@ export async function sendVerificationEmail({ to, token }) {
     console.warn('[Email] Placeholder from address in use. Set EMAIL_FROM to a verified identity.');
   }
 
-  const apiKey = process.env.SEND_GRID_PASS;
-  if (!apiKey) {
-    console.log('[Email][Mock] (missing SEND_GRID_PASS) To:', to, '\nSubject:', subject, '\nText:', text);
+  if (!hasSmtpCredentials()) {
+    console.log('[Email][Mock] (missing SMTP_HOST/SMTP_USER/SMTP_PASS) To:', to, '\nSubject:', subject, '\nText:', text);
     return { mocked: true };
   }
 
-  const payload = buildSendGridPayload({ from, to, subject, text, html });
+  const message = { from, to, subject, text, html };
   const attempts = toInt(process.env.EMAIL_API_RETRIES, 3);
   const timeoutMs = toInt(process.env.EMAIL_API_TIMEOUT_MS, 10000);
   const baseBackoff = toInt(process.env.EMAIL_API_RETRY_BACKOFF_MS, 500);
@@ -53,14 +109,9 @@ export async function sendVerificationEmail({ to, token }) {
   for (let attempt = 1; attempt <= attempts; attempt++) {
     const attemptStart = Date.now();
     try {
-      const res = await sendGridRequest({ apiKey, payload, timeoutMs });
+      const res = await smtpSendRequest({ message, timeoutMs });
       const elapsed = Date.now() - attemptStart;
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        return { mocked: false, method: 'api', statusCode: res.statusCode, attempt, elapsedMs: elapsed, totalElapsedMs: Date.now() - startOverall };
-      }
-      // Non-success status
-      lastErr = new Error(`SendGrid API status ${res.statusCode} body: ${truncate(res.body, 500)}`);
-      if (logFailures) console.warn(`[Email][Attempt ${attempt}] Non-2xx:`, res.statusCode, truncate(res.body, 200));
+      return { mocked: false, method: 'smtp', messageId: res.messageId, accepted: res.accepted, attempt, elapsedMs: elapsed, totalElapsedMs: Date.now() - startOverall };
     } catch (err) {
       lastErr = err;
       if (logFailures) console.warn(`[Email][Attempt ${attempt}] Error:`, err.message || err);
@@ -90,51 +141,30 @@ function buildVerificationContent(token) {
   return { subject, text, html };
 }
 
-function buildSendGridPayload({ from, to, subject, text, html }) {
-  return JSON.stringify({
-    personalizations: [{ to: [{ email: to }] }],
-    from: parseFromField(from),
-    subject,
-    content: [
-      { type: 'text/plain', value: text },
-      { type: 'text/html', value: html }
-    ]
-  });
-}
-
-function sendGridRequest({ apiKey, payload, timeoutMs }) {
+function smtpSendRequest({ message, timeoutMs }) {
+  const t = getTransporter();
   return new Promise((resolve, reject) => {
-    const req = https.request({
-      method: 'POST',
-      host: 'api.sendgrid.com',
-      path: '/v3/mail/send',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      },
-      agent: sendGridAgent,
-      timeout: timeoutMs
-    }, res => {
-      let body = '';
-      res.on('data', c => (body += c));
-      res.on('end', () => resolve({ statusCode: res.statusCode || 0, body }));
-    });
-    req.on('error', err => reject(err));
-    req.on('timeout', () => {
-      req.destroy(new Error('SendGrid API request timeout'));
-    });
-    req.write(payload);
-    req.end();
-  });
-}
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error('SMTP send request timeout'));
+    }, timeoutMs);
 
-function parseFromField(raw) {
-  const match = raw.match(/^(.*)<([^>]+)>$/);
-  if (match) {
-    return { email: match[2].trim(), name: match[1].trim().replace(/"/g, '').trim() };
-  }
-  return { email: raw.replace(/"/g, '').trim() };
+    t.sendMail(message)
+      .then(info => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(info);
+      })
+      .catch(err => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
 }
 
 function toInt(val, def) {
@@ -143,8 +173,3 @@ function toInt(val, def) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function truncate(str, max) {
-  if (!str) return str;
-  return str.length > max ? str.slice(0, max) + '…' : str;
-}

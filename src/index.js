@@ -89,14 +89,14 @@ const server = app.listen(PORT, () => {
 });
 
 // Periodic DB ping to surface closed/idle connections early (option B)
-const PRISMA_PING_INTERVAL_MS = parseInt(process.env.PRISMA_PING_INTERVAL_MS || '180000', 10);
-setInterval(async () => {
-	try {
-		await prisma.$queryRaw`SELECT 1`;
-	} catch (e) {
-		console.warn('[DB Health] Ping failed:', e.message || e);
-	}
-}, PRISMA_PING_INTERVAL_MS).unref();
+// const PRISMA_PING_INTERVAL_MS = parseInt(process.env.PRISMA_PING_INTERVAL_MS || '180000', 10);
+// setInterval(async () => {
+// 	try {
+// 		await prisma.$queryRaw`SELECT 1`;
+// 	} catch (e) {
+// 		console.warn('[DB Health] Ping failed:', e.message || e);
+// 	}
+// }, PRISMA_PING_INTERVAL_MS).unref();
 
 // Graceful shutdown & diagnostics
 const shutdownSignals = ['SIGTERM', 'SIGINT'];
